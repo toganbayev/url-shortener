@@ -1,0 +1,223 @@
+package dev.toganbayev.urlshortener.repository;
+
+import dev.toganbayev.urlshortener.entity.UrlEntity;
+import org.junit.jupiter.api.Test;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.test.autoconfigure.orm.jpa.DataJpaTest;
+import org.springframework.dao.DataIntegrityViolationException;
+
+import java.util.Optional;
+
+import static org.junit.jupiter.api.Assertions.*;
+
+/**
+ * Integration tests for UrlRepository using real database.
+ *
+ * Key concepts:
+ * - @DataJpaTest: Configures in-memory H2 database for testing
+ * - Automatically rolls back transactions after each test (isolation)
+ * - Tests real JPA behavior, not mocks
+ * - Verifies database constraints (unique indexes, etc.)
+ * - Uses H2 database configured in src/test/resources/application.properties
+ *
+ * These tests verify:
+ * 1. JPA repository methods work correctly
+ * 2. Database constraints are enforced
+ * 3. Entity mapping is correct
+ */
+@DataJpaTest // Loads JPA components and configures in-memory database
+class UrlRepositoryTest {
+
+    // Real repository instance (not mocked)
+    // Spring injects this with H2 database connection
+    @Autowired
+    private UrlRepository urlRepository;
+
+    /**
+     * Happy path: findByShortCode() should retrieve saved entity.
+     *
+     * Test flow:
+     * 1. Create and save entity to database
+     * 2. Call findByShortCode()
+     * 3. Verify Optional contains the entity
+     * 4. Verify all fields match
+     *
+     * This tests:
+     * - JPA save() works
+     * - Custom query method findByShortCode() works
+     * - Entity is correctly mapped to database table
+     */
+    @Test
+    void findByShortCode_WithExistingShortCode_ShouldReturnEntity() {
+        // Arrange: Save entity to database
+        UrlEntity entity = new UrlEntity();
+        entity.setMainUrl("https://example.com");
+        entity.setShortCode("abc12345");
+        urlRepository.save(entity); // INSERT INTO url ...
+
+        // Act: Query by shortCode
+        Optional<UrlEntity> result = urlRepository.findByShortCode("abc12345");
+        // SQL: SELECT * FROM url WHERE short_code = 'abc12345'
+
+        // Assert: Verify entity was found
+        assertTrue(result.isPresent()); // Optional should contain a value
+        assertEquals("https://example.com", result.get().getMainUrl());
+        assertEquals("abc12345", result.get().getShortCode());
+    }
+
+    /**
+     * Error case: findByShortCode() with non-existing code should return empty.
+     *
+     * Test flow:
+     * 1. Don't save anything to database
+     * 2. Query for non-existing shortCode
+     * 3. Verify Optional is empty (not null!)
+     *
+     * This tests that Spring Data JPA returns Optional.empty() correctly.
+     */
+    @Test
+    void findByShortCode_WithNonExistingShortCode_ShouldReturnEmpty() {
+        // Act: Query for non-existing shortCode
+        Optional<UrlEntity> result = urlRepository.findByShortCode("notfound");
+        // SQL: SELECT * FROM url WHERE short_code = 'notfound'
+        // Result: 0 rows
+
+        // Assert: Optional should be empty, not null
+        assertTrue(result.isEmpty()); // Same as !result.isPresent()
+    }
+
+    /**
+     * Database constraint test: Duplicate shortCode should throw exception.
+     *
+     * Test flow:
+     * 1. Save entity with shortCode "duplicate"
+     * 2. Try to save another entity with same shortCode
+     * 3. Verify database throws DataIntegrityViolationException
+     *
+     * This tests the UNIQUE constraint on shortCode column:
+     * @Column(unique = true) in UrlEntity
+     *
+     * Note: Using saveAndFlush() to force immediate write to database.
+     * Without flush(), Hibernate might not execute INSERT until transaction commit.
+     */
+    @Test
+    void save_WithDuplicateShortCode_ShouldThrowException() {
+        // Arrange: Save first entity
+        UrlEntity entity1 = new UrlEntity();
+        entity1.setMainUrl("https://example.com");
+        entity1.setShortCode("duplicate");
+        urlRepository.save(entity1); // First INSERT succeeds
+
+        // Create second entity with SAME shortCode
+        UrlEntity entity2 = new UrlEntity();
+        entity2.setMainUrl("https://another-example.com");
+        entity2.setShortCode("duplicate"); // Same as entity1!
+
+        // Act & Assert: Second INSERT should fail due to unique constraint
+        assertThrows(DataIntegrityViolationException.class, () -> {
+            urlRepository.saveAndFlush(entity2); // Flush forces immediate execution
+            // SQL: INSERT INTO url (short_code, ...) VALUES ('duplicate', ...)
+            // Database error: Unique constraint violation
+        });
+    }
+
+    /**
+     * Basic persistence test: save() should generate ID and persist data.
+     *
+     * Test flow:
+     * 1. Create entity (ID is null)
+     * 2. Save entity
+     * 3. Verify ID was auto-generated by database
+     * 4. Verify all fields were saved correctly
+     *
+     * This tests:
+     * - @GeneratedValue(strategy = GenerationType.IDENTITY) works
+     * - Database auto-increment generates ID
+     * - All entity fields are persisted
+     */
+    @Test
+    void save_WithValidData_ShouldPersistEntity() {
+        // Arrange: Create entity without ID
+        UrlEntity entity = new UrlEntity();
+        entity.setMainUrl("https://example.com");
+        entity.setShortCode("abc12345");
+        // entity.getId() is null at this point
+
+        // Act: Save to database
+        UrlEntity savedEntity = urlRepository.save(entity);
+        // SQL: INSERT INTO url (main_url, short_code) VALUES (?, ?)
+        // Database assigns ID automatically
+
+        // Assert: Verify persistence
+        assertNotNull(savedEntity.getId()); // ID should be generated (e.g., 1)
+        assertEquals("https://example.com", savedEntity.getMainUrl());
+        assertEquals("abc12345", savedEntity.getShortCode());
+    }
+
+    /**
+     * Case sensitivity test: Verify shortCode matching is case-sensitive.
+     *
+     * Test flow:
+     * 1. Save entity with mixed-case shortCode "AbC12345"
+     * 2. Query with exact case "AbC12345" - should find it
+     * 3. Query with different case "abc12345" - should NOT find it
+     *
+     * This verifies:
+     * - Database string comparison is case-sensitive
+     * - "AbC12345" and "abc12345" are treated as different values
+     *
+     * Important: This behavior depends on database collation.
+     * Most databases default to case-sensitive for VARCHAR.
+     */
+    @Test
+    void findByShortCode_IsCaseSensitive() {
+        // Arrange: Save with mixed case
+        UrlEntity entity = new UrlEntity();
+        entity.setMainUrl("https://example.com");
+        entity.setShortCode("AbC12345"); // Mixed case
+        urlRepository.save(entity);
+
+        // Act: Query with different cases
+        Optional<UrlEntity> upperCaseResult = urlRepository.findByShortCode("AbC12345"); // Exact match
+        Optional<UrlEntity> lowerCaseResult = urlRepository.findByShortCode("abc12345"); // Different case
+
+        // Assert: Case matters
+        assertTrue(upperCaseResult.isPresent()); // Found with exact case
+        assertTrue(lowerCaseResult.isEmpty()); // NOT found with different case
+    }
+
+    /**
+     * Multiple records test: Verify multiple entities can be saved and queried.
+     *
+     * Test flow:
+     * 1. Save two entities with different shortCodes
+     * 2. Verify total count is 2
+     * 3. Verify both can be found individually
+     *
+     * This tests:
+     * - Multiple INSERTs work
+     * - count() method works
+     * - Each entity can be queried independently
+     * - No interference between entities
+     */
+    @Test
+    void save_WithMultipleDifferentShortCodes_ShouldSucceed() {
+        // Arrange: Create two different entities
+        UrlEntity entity1 = new UrlEntity();
+        entity1.setMainUrl("https://example1.com");
+        entity1.setShortCode("short001");
+
+        UrlEntity entity2 = new UrlEntity();
+        entity2.setMainUrl("https://example2.com");
+        entity2.setShortCode("short002"); // Different shortCode
+
+        // Act: Save both
+        urlRepository.save(entity1); // INSERT #1
+        urlRepository.save(entity2); // INSERT #2
+
+        // Assert: Both are in database
+        assertEquals(2, urlRepository.count()); // SELECT COUNT(*) FROM url
+        assertTrue(urlRepository.findByShortCode("short001").isPresent());
+        assertTrue(urlRepository.findByShortCode("short002").isPresent());
+    }
+}
