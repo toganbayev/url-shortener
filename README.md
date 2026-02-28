@@ -139,17 +139,17 @@ curl -I http://localhost:8080/aB3xY9Zq
 └──────────────────┬──────────────────────────────┘
                    │
 ┌──────────────────▼──────────────────────────────┐
-│           Service Layer                          │
+│           Service Layer                         │
 │  (Business logic, validation, shortCode gen)    │
 └──────────────────┬──────────────────────────────┘
                    │
 ┌──────────────────▼──────────────────────────────┐
-│           Repository Layer                       │
+│           Repository Layer                      │
 │  (Spring Data JPA, database access)             │
 └──────────────────┬──────────────────────────────┘
                    │
 ┌──────────────────▼──────────────────────────────┐
-│           PostgreSQL Database                    │
+│           PostgreSQL Database                   │
 │  (Persistent storage)                           │
 └─────────────────────────────────────────────────┘
 ```
