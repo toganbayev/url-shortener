@@ -5,6 +5,10 @@ A modern, production-ready URL shortening service built with Spring Boot 3.5 and
 [![Java](https://img.shields.io/badge/Java-21-orange.svg)](https://www.oracle.com/java/)
 [![Spring Boot](https://img.shields.io/badge/Spring%20Boot-3.5.10-brightgreen.svg)](https://spring.io/projects/spring-boot)
 [![PostgreSQL](https://img.shields.io/badge/PostgreSQL-16-blue.svg)](https://www.postgresql.org/)
+[![Maven](https://img.shields.io/badge/Maven-3.x-C71A36.svg)](https://maven.apache.org/)
+[![Lombok](https://img.shields.io/badge/Lombok-latest-pink.svg)](https://projectlombok.org/)
+[![JUnit 5](https://img.shields.io/badge/JUnit-5-25A162.svg)](https://junit.org/junit5/)
+[![Testcontainers](https://img.shields.io/badge/Testcontainers-latest-1D2C4D.svg)](https://testcontainers.com/)
 
 ## Features
 
